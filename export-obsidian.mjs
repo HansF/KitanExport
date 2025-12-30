@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { mkdir, writeFile } from 'fs/promises';
+import { mkdir, readFile, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -12,12 +12,17 @@ function parseArgs(argv) {
     outDir: null,
     envPath: null,
     help: false,
+    incremental: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--help' || arg === '-h') {
       options.help = true;
+      continue;
+    }
+    if (arg === '--incremental') {
+      options.incremental = true;
       continue;
     }
     if (arg === '--out' || arg === '--folder' || arg === '--vault') {
@@ -61,6 +66,7 @@ Options:
   --out, --folder, --vault   Destination Obsidian folder
   --env                      Path to .env (defaults to ./.env if present,
                              otherwise ./kitanocr-web/.env)
+  --incremental              Only write new OCR generations and affected issues
   -h, --help                 Show help
 `);
 }
@@ -138,7 +144,7 @@ function formatDate(value) {
 }
 
 function buildOverview({ years, issues }) {
-  const lines = ['# Kitan OCR Export', '', '## Years'];
+  const lines = ['# Kitan OCR Export', '', '## Logs', '- [[Logs/Export Log|Export Log]]', '', '## Years'];
   const yearEntries = Object.entries(years).sort(([a], [b]) => a.localeCompare(b));
   for (const [year, issueList] of yearEntries) {
     const label = year === 'unknown' ? 'Unknown' : year;
@@ -156,7 +162,14 @@ function buildOverview({ years, issues }) {
 }
 
 function buildYearNote(year, issues) {
-  const lines = [`# ${year === 'unknown' ? 'Unknown Year' : year}`, '', '## Issues'];
+  const lines = [
+    `# ${year === 'unknown' ? 'Unknown Year' : year}`,
+    '',
+    '## Logs',
+    '- [[Logs/Export Log|Export Log]]',
+    '',
+    '## Issues',
+  ];
   const sorted = [...issues].sort((a, b) => String(a.title).localeCompare(String(b.title)));
   for (const issue of sorted) {
     const issueSlug = slugify(issue.title || issue.id);
@@ -231,6 +244,10 @@ function buildGenerationSlug(issue, page, generation) {
   return `${issueSlug}-page-${pageNumber}-gen-${generation.id}`;
 }
 
+function generationFilePath(generationsDir, generationSlug) {
+  return join(generationsDir, `${generationSlug}.md`);
+}
+
 function resolveImageUrl(page) {
   const imagePath = page.image_path ? String(page.image_path).trim() : '';
   if (!imagePath) return '';
@@ -240,6 +257,31 @@ function resolveImageUrl(page) {
   const trimmedBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
   const trimmedPath = imagePath.startsWith('/') ? imagePath.slice(1) : imagePath;
   return `${trimmedBase}/${trimmedPath}`;
+}
+
+async function loadState(statePath) {
+  if (!existsSync(statePath)) return {};
+  try {
+    const content = await readFile(statePath, 'utf8');
+    return JSON.parse(content);
+  } catch (err) {
+    console.warn(`Failed to read state file, continuing: ${err.message}`);
+    return {};
+  }
+}
+
+async function saveState(statePath, nextState) {
+  const payload = JSON.stringify(nextState, null, 2);
+  await writeFile(statePath, payload, 'utf8');
+}
+
+async function appendLogEntry(logPath, entryLines) {
+  const logExists = existsSync(logPath);
+  const header = logExists ? '' : '# Export Log\n\n';
+  await writeFile(logPath, `${header}${entryLines.join('\n')}\n`, {
+    encoding: 'utf8',
+    flag: 'a',
+  });
 }
 
 async function main() {
@@ -252,11 +294,14 @@ async function main() {
   const envPath = resolveEnvPath(options.envPath);
   config({ path: envPath });
 
+  const incremental = options.incremental || process.env.OBSIDIAN_EXPORT_INCREMENTAL === '1';
   const outDir = options.outDir || process.env.OBSIDIAN_EXPORT_DIR;
   if (!outDir) {
     throw new Error('Missing output folder. Use --out <folder> or set OBSIDIAN_EXPORT_DIR.');
   }
 
+  const statePath = join(outDir, '.export-state.json');
+  const previousState = await loadState(statePath);
   const supabaseUrl = process.env.VITE_SUPABASE_URL;
   const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !supabaseKey) {
@@ -301,47 +346,116 @@ async function main() {
   const yearsDir = join(outDir, 'Years');
   const issuesDir = join(outDir, 'Issues');
   const generationsDir = join(outDir, 'Generations');
+  const logsDir = join(outDir, 'Logs');
+  const logPath = join(logsDir, 'Export Log.md');
   await mkdir(yearsDir, { recursive: true });
   await mkdir(issuesDir, { recursive: true });
   await mkdir(generationsDir, { recursive: true });
+  await mkdir(logsDir, { recursive: true });
 
-  const overviewContent = buildOverview({ years, issues });
-  await writeFile(join(outDir, 'Overview.md'), overviewContent, 'utf8');
+  const overviewPath = join(outDir, 'Overview.md');
+  const overviewExists = existsSync(overviewPath);
+  let overviewNeedsUpdate = !incremental || !overviewExists;
+
+  let totalNewGenerations = 0;
+  let totalUpdatedIssues = 0;
+  let totalUpdatedYears = 0;
+  let lastGenerationFile = '';
+  let lastGenerationId = '';
 
   const sortedYears = Object.entries(years).sort(([a], [b]) => a.localeCompare(b));
   for (const [year, issueList] of sortedYears) {
     console.log(`Processing year ${year} (${issueList.length} issues)...`);
-    const yearContent = buildYearNote(year, issueList);
-    await writeFile(join(yearsDir, `${year}.md`), yearContent, 'utf8');
+    const yearPath = join(yearsDir, `${year}.md`);
+    const yearExists = existsSync(yearPath);
+    let yearNeedsUpdate = !incremental || !yearExists;
 
     let totalPagesForYear = 0;
+    let newGenerationsForYear = 0;
     for (const issue of issueList) {
+      const issueSlug = slugify(issue.title || issue.id);
+      const issuePath = join(issuesDir, `${issueSlug}.md`);
+      const issueExists = existsSync(issuePath);
       const issuePages = pagesByIssue.get(issue.id) || [];
       totalPagesForYear += issuePages.length;
       for (const page of issuePages) {
         page.ocr_generations = ocrByPage.get(page.id) || [];
       }
+      const hasGenerations = issuePages.some((page) => page.ocr_generations.length > 0);
+      let hasNewGenerations = false;
+
+      for (const page of issuePages) {
+        const generations = page.ocr_generations || [];
+        for (const generation of generations) {
+          const generationSlug = buildGenerationSlug(issue, page, generation);
+          const generationPath = generationFilePath(generationsDir, generationSlug);
+          if (incremental && existsSync(generationPath)) {
+            continue;
+          }
+          const generationContent = buildGenerationNote(issue, page, generation);
+          await writeFile(generationPath, generationContent, 'utf8');
+          hasNewGenerations = true;
+          newGenerationsForYear += 1;
+          totalNewGenerations += 1;
+          lastGenerationFile = `Generations/${generationSlug}.md`;
+          lastGenerationId = String(generation.id || '');
+        }
+      }
+
+      const shouldWriteIssue =
+        !incremental ||
+        (!issueExists && hasGenerations) ||
+        hasNewGenerations;
+
       const stats = {
         totalPages: issuePages.length,
         pagesWithText: issuePages.filter((page) => page.ocr_text || page.status === 'completed').length,
         pagesWithGenerations: issuePages.filter((page) => (ocrByPage.get(page.id) || []).length > 0).length,
       };
-      const issueContent = buildIssueNote(issue, issuePages, stats);
-      const issueSlug = slugify(issue.title || issue.id);
-      await writeFile(join(issuesDir, `${issueSlug}.md`), issueContent, 'utf8');
-
-      for (const page of issuePages) {
-        const generations = ocrByPage.get(page.id) || [];
-        for (const generation of generations) {
-          const generationSlug = buildGenerationSlug(issue, page, generation);
-          const generationContent = buildGenerationNote(issue, page, generation);
-          await writeFile(join(generationsDir, `${generationSlug}.md`), generationContent, 'utf8');
-        }
+      if (shouldWriteIssue) {
+        const issueContent = buildIssueNote(issue, issuePages, stats);
+        await writeFile(issuePath, issueContent, 'utf8');
+        totalUpdatedIssues += 1;
+      }
+      if (!issueExists && shouldWriteIssue) {
+        yearNeedsUpdate = true;
+        overviewNeedsUpdate = true;
       }
     }
 
-    console.log(`Finished year ${year}: ${issueList.length} issues, ${totalPagesForYear} pages.`);
+    if (yearNeedsUpdate) {
+      const yearContent = buildYearNote(year, issueList);
+      await writeFile(yearPath, yearContent, 'utf8');
+      totalUpdatedYears += 1;
+    }
+
+    console.log(
+      `Finished year ${year}: ${issueList.length} issues, ${totalPagesForYear} pages, ${newGenerationsForYear} new generations.`
+    );
   }
+
+  if (overviewNeedsUpdate) {
+    const overviewContent = buildOverview({ years, issues });
+    await writeFile(overviewPath, overviewContent, 'utf8');
+  }
+
+  const runTimestamp = new Date().toISOString();
+  const logLines = [
+    `## ${runTimestamp}`,
+    `- imported: ${totalNewGenerations} new generations`,
+    `- updated issues: ${totalUpdatedIssues}`,
+    `- updated years: ${totalUpdatedYears}`,
+    `- last file: ${lastGenerationFile || 'none'}`,
+  ];
+  await appendLogEntry(logPath, logLines);
+
+  const nextState = {
+    lastRunAt: runTimestamp,
+    lastGenerationId: lastGenerationId || previousState.lastGenerationId || '',
+    lastGenerationFile: lastGenerationFile || previousState.lastGenerationFile || '',
+    totalNewGenerations,
+  };
+  await saveState(statePath, nextState);
 
   console.log(`Export complete. Wrote notes to ${outDir}`);
 }
