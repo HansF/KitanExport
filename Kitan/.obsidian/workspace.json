@@ -1,0 +1,195 @@
+{
+  "main": {
+    "id": "a6381d6aa026db49",
+    "type": "split",
+    "children": [
+      {
+        "id": "8eacf87c48f596b4",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "3667955a0d515b58",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Generations/194712-page-017-gen-f4830e27-9719-459e-8591-963731956f26.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "194712-page-017-gen-f4830e27-9719-459e-8591-963731956f26"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "984eafeeee2b1bc6",
+    "type": "split",
+    "children": [
+      {
+        "id": "7754825a256d4423",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "0bfcab8839a65e79",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "5e07d495b908e9f5",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "8730a225496f24f0",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "804987dd615849b5",
+    "type": "split",
+    "children": [
+      {
+        "id": "528fdca5802b280b",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "6abf87cf33a98c73",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "Generations/194712-page-017-gen-f4830e27-9719-459e-8591-963731956f26.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for 194712-page-017-gen-f4830e27-9719-459e-8591-963731956f26"
+            }
+          },
+          {
+            "id": "3f2d0bb3f2a38295",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "Generations/194712-page-017-gen-f4830e27-9719-459e-8591-963731956f26.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from 194712-page-017-gen-f4830e27-9719-459e-8591-963731956f26"
+            }
+          },
+          {
+            "id": "c0a30e6d3e94561e",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "a8eb611d7f2c7788",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "bdc7dfedce10f2c3",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "Generations/194712-page-017-gen-f4830e27-9719-459e-8591-963731956f26.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of 194712-page-017-gen-f4830e27-9719-459e-8591-963731956f26"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "0bfcab8839a65e79",
+  "lastOpenFiles": [
+    "Generations/194712-page-016-gen-bc4a5f34-42d6-458a-8e84-a5f83f59dca3.md",
+    "Generations/194712-page-015-gen-49fabb8f-b4ea-41e9-aa7b-771b4353b1bf.md",
+    "Generations/194712-page-007-gen-ce0304fe-d8bc-4629-bde1-a2872c8b7f60.md",
+    "Generations/194712-page-006-gen-adf47efa-4db8-437d-b752-fae5e52a34b7.md",
+    "Generations/194712-page-001-gen-4e7c865e-242f-4dd2-ba05-57d741378d81.md",
+    "Generations/194711-page-003-gen-93638174-9163-44a2-ba8f-c7fd3c2dbd15.md"
+  ]
+}

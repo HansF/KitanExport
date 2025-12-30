@@ -1,0 +1,44 @@
+name: Export Obsidian
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run exporter
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_IMAGE_BASE_URL: ${{ secrets.VITE_IMAGE_BASE_URL }}
+        run: node export-obsidian.mjs --out Kitan
+
+      - name: Commit changes
+        run: |
+          if [ -n "$(git status --porcelain Kitan)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add Kitan
+            git commit -m "Update Obsidian export"
+            git push
+          else
+            echo "No changes to commit."
+          fi
