@@ -1,5 +1,8 @@
 # Kitan OCR Export
 
+## Logs
+- [[Logs/Export Log|Export Log]]
+
 ## Years
 - [[Years/1947|1947]] (2 issues)
 - [[Years/1948|1948]] (3 issues)
