@@ -22,6 +22,9 @@ The export creates (or updates) these files under the target folder:
 - `Years/<year>.md`
 - `Issues/<issue-slug>.md`
 - `Generations/<issue-slug>-page-###-gen-<id>.md`
+- `Dashboards/By Author.md`
+- `Dashboards/By Tag.md`
+- `Dashboards/Recent Exports.md`
 
 Where:
 - `<year>` is a 4-digit year or `unknown`
@@ -43,6 +46,15 @@ Where:
 `Generations/<issue-slug>-page-###-gen-<id>.md`
 - Metadata: generation id, page id, issue id, created_at, model, image_path
 - OCR prompt/output from `ocr_generations`
+
+`Dashboards/By Author.md`
+- Authors listed alphabetically with wiki-links to author index notes and nested issue links
+
+`Dashboards/By Tag.md`
+- Tags listed alphabetically with wiki-links to tag index notes and nested issue links
+
+`Dashboards/Recent Exports.md`
+- Most recent issues (by `created_at`) with links to their notes
 
 ## Environment Variables
 Required:
