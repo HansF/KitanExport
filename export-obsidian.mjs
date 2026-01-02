@@ -161,6 +161,123 @@ function buildOverview({ years, issues }) {
   return lines.join('\n');
 }
 
+function normalizeList(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item || '').trim())
+      .filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function getIssueAuthors(issue) {
+  if (!issue) return [];
+  const authors = normalizeList(issue.authors ?? issue.author);
+  return Array.from(new Set(authors));
+}
+
+function getIssueTags(issue) {
+  if (!issue) return [];
+  return Array.from(new Set(normalizeList(issue.tags)));
+}
+
+function deriveAuthorAggregates(issues) {
+  const authors = new Map();
+  for (const issue of issues) {
+    for (const author of getIssueAuthors(issue)) {
+      if (!authors.has(author)) authors.set(author, []);
+      authors.get(author).push(issue);
+    }
+  }
+  return authors;
+}
+
+function deriveTagAggregates(issues) {
+  const tags = new Map();
+  for (const issue of issues) {
+    for (const tag of getIssueTags(issue)) {
+      if (!tags.has(tag)) tags.set(tag, []);
+      tags.get(tag).push(issue);
+    }
+  }
+  return tags;
+}
+
+function sortIssuesByCreatedAt(issues) {
+  return [...issues].sort((a, b) => {
+    const aTime = new Date(a.created_at || 0).valueOf();
+    const bTime = new Date(b.created_at || 0).valueOf();
+    return bTime - aTime;
+  });
+}
+
+function buildAuthorDashboard(authorAggregates) {
+  const lines = ['# Issues by Author', '', '## Authors'];
+  const authorEntries = Array.from(authorAggregates.entries()).sort(([a], [b]) =>
+    String(a || '').localeCompare(String(b || ''))
+  );
+
+  for (const [author, issueList] of authorEntries) {
+    const authorLabel = author || 'Unknown Author';
+    const authorSlug = slugify(authorLabel);
+    const issueCount = issueList.length;
+    lines.push(`- [[Pages/Authors/${authorSlug}|${authorLabel}]] (${issueCount} issues)`);
+
+    const sortedIssues = [...issueList].sort((a, b) =>
+      String(a.title || a.id).localeCompare(String(b.title || b.id))
+    );
+    for (const issue of sortedIssues) {
+      const issueSlug = slugify(issue.title || issue.id);
+      lines.push(`  - [[Issues/${issueSlug}|${issue.title || issue.id}]]`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function buildTagDashboard(tagAggregates) {
+  const lines = ['# Issues by Tag', '', '## Tags'];
+  const tagEntries = Array.from(tagAggregates.entries()).sort(([a], [b]) =>
+    String(a || '').localeCompare(String(b || ''))
+  );
+
+  for (const [tag, issueList] of tagEntries) {
+    const tagLabel = tag || 'untagged';
+    const tagSlug = slugify(tagLabel);
+    const issueCount = issueList.length;
+    lines.push(`- [[Pages/Tags/${tagSlug}|${tagLabel}]] (${issueCount} issues)`);
+
+    const sortedIssues = [...issueList].sort((a, b) =>
+      String(a.title || a.id).localeCompare(String(b.title || b.id))
+    );
+    for (const issue of sortedIssues) {
+      const issueSlug = slugify(issue.title || issue.id);
+      lines.push(`  - [[Issues/${issueSlug}|${issue.title || issue.id}]]`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function buildRecentExportsDashboard(issues, limit = 50) {
+  const lines = ['# Recent Exports', '', '## Most Recent Issues'];
+  const recentIssues = issues.slice(0, limit);
+
+  for (const issue of recentIssues) {
+    const issueSlug = slugify(issue.title || issue.id);
+    const createdAt = formatDate(issue.created_at);
+    lines.push(`- [[Issues/${issueSlug}|${issue.title || issue.id}]] (${createdAt})`);
+  }
+
+  return lines.join('\n');
+}
+
 function buildYearNote(year, issues) {
   const lines = [
     `# ${year === 'unknown' ? 'Unknown Year' : year}`,
@@ -347,15 +464,22 @@ async function main() {
   const issuesDir = join(outDir, 'Issues');
   const generationsDir = join(outDir, 'Generations');
   const logsDir = join(outDir, 'Logs');
+  const dashboardsDir = join(outDir, 'Dashboards');
   const logPath = join(logsDir, 'Export Log.md');
   await mkdir(yearsDir, { recursive: true });
   await mkdir(issuesDir, { recursive: true });
   await mkdir(generationsDir, { recursive: true });
   await mkdir(logsDir, { recursive: true });
+  await mkdir(dashboardsDir, { recursive: true });
 
   const overviewPath = join(outDir, 'Overview.md');
   const overviewExists = existsSync(overviewPath);
   let overviewNeedsUpdate = !incremental || !overviewExists;
+  const byAuthorPath = join(dashboardsDir, 'By Author.md');
+  const byTagPath = join(dashboardsDir, 'By Tag.md');
+  const recentExportsPath = join(dashboardsDir, 'Recent Exports.md');
+  const dashboardsExist = existsSync(byAuthorPath) && existsSync(byTagPath) && existsSync(recentExportsPath);
+  let dashboardsNeedUpdate = !incremental || !dashboardsExist;
 
   let totalNewGenerations = 0;
   let totalUpdatedIssues = 0;
@@ -420,6 +544,7 @@ async function main() {
       if (!issueExists && shouldWriteIssue) {
         yearNeedsUpdate = true;
         overviewNeedsUpdate = true;
+        dashboardsNeedUpdate = true;
       }
     }
 
@@ -437,6 +562,20 @@ async function main() {
   if (overviewNeedsUpdate) {
     const overviewContent = buildOverview({ years, issues });
     await writeFile(overviewPath, overviewContent, 'utf8');
+  }
+
+  if (dashboardsNeedUpdate) {
+    const authorAggregates = deriveAuthorAggregates(issues);
+    const tagAggregates = deriveTagAggregates(issues);
+    const recentIssues = sortIssuesByCreatedAt(issues);
+
+    const authorContent = buildAuthorDashboard(authorAggregates);
+    const tagContent = buildTagDashboard(tagAggregates);
+    const recentContent = buildRecentExportsDashboard(recentIssues);
+
+    await writeFile(byAuthorPath, authorContent, 'utf8');
+    await writeFile(byTagPath, tagContent, 'utf8');
+    await writeFile(recentExportsPath, recentContent, 'utf8');
   }
 
   const runTimestamp = new Date().toISOString();
