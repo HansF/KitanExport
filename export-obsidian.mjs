@@ -143,8 +143,48 @@ function formatDate(value) {
   return parsed.toISOString();
 }
 
-function buildOverview({ years, issues }) {
-  const lines = ['# Kitan OCR Export', '', '## Logs', '- [[Logs/Export Log|Export Log]]', '', '## Years'];
+function normalizeList(value) {
+  if (Array.isArray(value)) return value.filter((item) => item !== undefined && item !== null);
+  if (value === undefined || value === null) return [];
+  return [value];
+}
+
+function buildFrontmatter(fields) {
+  const lines = ['---'];
+  for (const [key, rawValue] of Object.entries(fields)) {
+    if (Array.isArray(rawValue)) {
+      const values = normalizeList(rawValue).map((item) => String(item));
+      if (values.length === 0) {
+        lines.push(`${key}: []`);
+      } else {
+        lines.push(`${key}:`);
+        for (const entry of values) {
+          lines.push(`  - ${entry}`);
+        }
+      }
+      continue;
+    }
+
+    const value = rawValue === undefined || rawValue === null ? '' : rawValue;
+    lines.push(`${key}: ${value}`);
+  }
+
+  lines.push('---');
+  return lines.join('\n');
+}
+
+function buildOverview({ years, issues, runTimestamp }) {
+  const frontmatter = buildFrontmatter({
+    type: 'dashboard',
+    id: 'overview',
+    slug: 'overview',
+    year: '',
+    authors: [],
+    tags: ['overview', 'dashboard'],
+    created_at: runTimestamp,
+    updated_at: runTimestamp,
+  });
+  const lines = [frontmatter, '', '# Kitan OCR Export', '', '## Logs', '- [[Logs/Export Log|Export Log]]', '', '## Years'];
   const yearEntries = Object.entries(years).sort(([a], [b]) => a.localeCompare(b));
   for (const [year, issueList] of yearEntries) {
     const label = year === 'unknown' ? 'Unknown' : year;
@@ -161,8 +201,21 @@ function buildOverview({ years, issues }) {
   return lines.join('\n');
 }
 
-function buildYearNote(year, issues) {
+function buildYearNote(year, issues, runTimestamp) {
+  const frontmatter = buildFrontmatter({
+    type: 'year',
+    id: year,
+    slug: year,
+    year,
+    authors: [],
+    tags: ['year'],
+    created_at: runTimestamp,
+    updated_at: runTimestamp,
+    issue_count: issues.length,
+  });
   const lines = [
+    frontmatter,
+    '',
     `# ${year === 'unknown' ? 'Unknown Year' : year}`,
     '',
     '## Logs',
@@ -178,8 +231,23 @@ function buildYearNote(year, issues) {
   return lines.join('\n');
 }
 
-function buildIssueNote(issue, pages, stats) {
+function buildIssueNote(issue, pages, stats, { issueSlug, year }) {
+  const frontmatter = buildFrontmatter({
+    type: 'issue',
+    id: issue.id ?? '',
+    slug: issueSlug,
+    title: issue.title || '',
+    volume: issue.volume || '',
+    publication_date: issue.publication_date || '',
+    year,
+    authors: normalizeList(issue.authors),
+    tags: normalizeList(issue.tags),
+    created_at: formatDate(issue.created_at),
+    updated_at: formatDate(issue.updated_at),
+  });
   const lines = [
+    frontmatter,
+    '',
     `# ${issue.title || issue.id}`,
     '',
     '## Metadata',
@@ -213,8 +281,28 @@ function buildIssueNote(issue, pages, stats) {
   return lines.join('\n');
 }
 
-function buildGenerationNote(issue, page, generation) {
+function buildGenerationNote(issue, page, generation, { generationSlug }) {
+  const issueYear = inferYear(issue);
+  const frontmatter = buildFrontmatter({
+    type: 'generation',
+    id: generation.id ?? '',
+    slug: generationSlug,
+    issue_id: page.issue_id ?? '',
+    page_id: page.id ?? '',
+    issue_title: issue.title || '',
+    page_number: page.page_number ?? '',
+    year: issueYear,
+    authors: normalizeList(issue.authors),
+    tags: normalizeList(issue.tags),
+    created_at: formatDate(generation.created_at),
+    updated_at: formatDate(generation.created_at),
+    model: generation.model || 'unknown',
+    status: page.status || 'unknown',
+    image_path: page.image_path || '',
+  });
   const lines = [
+    frontmatter,
+    '',
     `# ${issue.title || issue.id} Page ${String(page.page_number || 0).padStart(3, '0')} OCR`,
     '',
     '## Metadata',
@@ -310,6 +398,8 @@ async function main() {
 
   const supabase = createClient(supabaseUrl, supabaseKey);
 
+  const runTimestamp = new Date().toISOString();
+
   console.log('Fetching issues, pages, and OCR generations...');
   const issues = await fetchAll(supabase, 'issues', '*', [
     { column: 'title', ascending: true },
@@ -392,7 +482,7 @@ async function main() {
           if (incremental && existsSync(generationPath)) {
             continue;
           }
-          const generationContent = buildGenerationNote(issue, page, generation);
+          const generationContent = buildGenerationNote(issue, page, generation, { generationSlug });
           await writeFile(generationPath, generationContent, 'utf8');
           hasNewGenerations = true;
           newGenerationsForYear += 1;
@@ -413,7 +503,7 @@ async function main() {
         pagesWithGenerations: issuePages.filter((page) => (ocrByPage.get(page.id) || []).length > 0).length,
       };
       if (shouldWriteIssue) {
-        const issueContent = buildIssueNote(issue, issuePages, stats);
+        const issueContent = buildIssueNote(issue, issuePages, stats, { issueSlug, year });
         await writeFile(issuePath, issueContent, 'utf8');
         totalUpdatedIssues += 1;
       }
@@ -424,7 +514,7 @@ async function main() {
     }
 
     if (yearNeedsUpdate) {
-      const yearContent = buildYearNote(year, issueList);
+      const yearContent = buildYearNote(year, issueList, runTimestamp);
       await writeFile(yearPath, yearContent, 'utf8');
       totalUpdatedYears += 1;
     }
@@ -435,11 +525,10 @@ async function main() {
   }
 
   if (overviewNeedsUpdate) {
-    const overviewContent = buildOverview({ years, issues });
+    const overviewContent = buildOverview({ years, issues, runTimestamp });
     await writeFile(overviewPath, overviewContent, 'utf8');
   }
 
-  const runTimestamp = new Date().toISOString();
   const logLines = [
     `## ${runTimestamp}`,
     `- imported: ${totalNewGenerations} new generations`,
