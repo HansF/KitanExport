@@ -22,6 +22,8 @@ The export creates (or updates) these files under the target folder:
 - `Years/<year>.md`
 - `Issues/<issue-slug>.md`
 - `Generations/<issue-slug>-page-###-gen-<id>.md`
+- `Authors/<author-slug>.md`
+- `Tags/<tag-slug>.md`
 
 Where:
 - `<year>` is a 4-digit year or `unknown`
@@ -34,15 +36,27 @@ Where:
 
 `Years/<year>.md`
 - Links to all issues in that year.
+- Summary lists of authors and tags that appear in that year's issues.
 
 `Issues/<issue-slug>.md`
 - Metadata: id, volume, publication_date, created_at, updated_at
 - Stats: total pages, pages with OCR text, pages with OCR generations
+- Authors and tags with links to per-author/per-tag notes
+- Related generation links for the issue
 - One line per page with an online image link and OCR generation links
 
 `Generations/<issue-slug>-page-###-gen-<id>.md`
 - Metadata: generation id, page id, issue id, created_at, model, image_path
 - OCR prompt/output from `ocr_generations`
+- Backlinks to the parent issue and year notes
+
+`Authors/<author-slug>.md`
+- Issue links grouped for that author with inferred years
+- Backlinks to year notes where the author appears
+
+`Tags/<tag-slug>.md`
+- Issue links grouped for that tag with inferred years
+- Backlinks to year notes where the tag appears
 
 ## Environment Variables
 Required:
