@@ -87,6 +87,43 @@ function slugify(value) {
     .toLowerCase();
 }
 
+function normalizeList(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') return value.split(/[,;]+/);
+  return [];
+}
+
+function deriveAuthors(issue) {
+  const rawAuthors = issue.authors || issue.author || issue.author_names || issue.author_name;
+  const normalized = normalizeList(rawAuthors)
+    .map((author) => String(author).trim())
+    .filter(Boolean);
+  const seen = new Set();
+  return normalized
+    .map((name) => ({ name, slug: slugify(name) }))
+    .filter((entry) => {
+      if (seen.has(entry.slug)) return false;
+      seen.add(entry.slug);
+      return true;
+    });
+}
+
+function deriveTags(issue) {
+  const rawTags = issue.tags || issue.tag || issue.labels;
+  const normalized = normalizeList(rawTags)
+    .map((tag) => String(tag).trim())
+    .filter(Boolean);
+  const seen = new Set();
+  return normalized
+    .map((name) => ({ name, slug: slugify(name) }))
+    .filter((entry) => {
+      if (seen.has(entry.slug)) return false;
+      seen.add(entry.slug);
+      return true;
+    });
+}
+
 function inferYear(issue) {
   if (issue.publication_date) {
     const parsed = new Date(issue.publication_date);
@@ -161,7 +198,7 @@ function buildOverview({ years, issues }) {
   return lines.join('\n');
 }
 
-function buildYearNote(year, issues) {
+function buildYearNote(year, issues, issueAuthors, issueTags) {
   const lines = [
     `# ${year === 'unknown' ? 'Unknown Year' : year}`,
     '',
@@ -175,10 +212,48 @@ function buildYearNote(year, issues) {
     const issueSlug = slugify(issue.title || issue.id);
     lines.push(`- [[Issues/${issueSlug}|${issue.title || issue.id}]]`);
   }
+
+  const authorCounts = new Map();
+  for (const issue of issues) {
+    for (const author of issueAuthors.get(issue.id) || []) {
+      const existing = authorCounts.get(author.slug) || { name: author.name, count: 0 };
+      existing.count += 1;
+      authorCounts.set(author.slug, existing);
+    }
+  }
+
+  const tagCounts = new Map();
+  for (const issue of issues) {
+    for (const tag of issueTags.get(issue.id) || []) {
+      const existing = tagCounts.get(tag.slug) || { name: tag.name, count: 0 };
+      existing.count += 1;
+      tagCounts.set(tag.slug, existing);
+    }
+  }
+
+  lines.push('', '## Authors');
+  if (authorCounts.size === 0) {
+    lines.push('- None');
+  } else {
+    const entries = [...authorCounts.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name));
+    for (const [slug, info] of entries) {
+      lines.push(`- [[Authors/${slug}|${info.name}]] (${info.count} issues)`);
+    }
+  }
+
+  lines.push('', '## Tags');
+  if (tagCounts.size === 0) {
+    lines.push('- None');
+  } else {
+    const entries = [...tagCounts.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name));
+    for (const [slug, info] of entries) {
+      lines.push(`- [[Tags/${slug}|${info.name}]] (${info.count} issues)`);
+    }
+  }
   return lines.join('\n');
 }
 
-function buildIssueNote(issue, pages, stats) {
+function buildIssueNote(issue, pages, stats, { authors = [], tags = [], year = 'unknown' } = {}) {
   const lines = [
     `# ${issue.title || issue.id}`,
     '',
@@ -194,10 +269,59 @@ function buildIssueNote(issue, pages, stats) {
     `- pages_with_text: ${stats.pagesWithText}`,
     `- pages_with_generations: ${stats.pagesWithGenerations}`,
     '',
-    '## Pages',
   ];
 
+  lines.push('## Authors');
+  if (authors.length === 0) {
+    lines.push('- None');
+  } else {
+    for (const author of authors) {
+      lines.push(`- [[Authors/${author.slug}|${author.name}]]`);
+    }
+  }
+
+  lines.push('', '## Tags');
+  if (tags.length === 0) {
+    lines.push('- None');
+  } else {
+    for (const tag of tags) {
+      lines.push(`- [[Tags/${tag.slug}|${tag.name}]]`);
+    }
+  }
+
+  const relatedGenerations = [];
   const sorted = [...pages].sort((a, b) => (a.page_number || 0) - (b.page_number || 0));
+  for (const page of sorted) {
+    for (const generation of page.ocr_generations || []) {
+      const generationSlug = buildGenerationSlug(issue, page, generation);
+      const pageLabel = `Page ${String(page.page_number || 0).padStart(3, '0')}`;
+      relatedGenerations.push({
+        slug: generationSlug,
+        pageLabel,
+        createdAt: generation.created_at,
+      });
+    }
+  }
+
+  relatedGenerations.sort((a, b) => {
+    const aDate = new Date(a.createdAt || 0).valueOf();
+    const bDate = new Date(b.createdAt || 0).valueOf();
+    const aTime = Number.isNaN(aDate) ? 0 : aDate;
+    const bTime = Number.isNaN(bDate) ? 0 : bDate;
+    return aTime - bTime;
+  });
+
+  lines.push('', '## Related Generations');
+  if (relatedGenerations.length === 0) {
+    lines.push('- None');
+  } else {
+    for (const gen of relatedGenerations) {
+      lines.push(`- [[Generations/${gen.slug}|${gen.pageLabel} – ${formatDate(gen.createdAt)}]]`);
+    }
+  }
+
+  lines.push('', '## Pages');
+
   for (const page of sorted) {
     const pageLabel = `Page ${String(page.page_number || 0).padStart(3, '0')}`;
     const imageUrl = resolveImageUrl(page);
@@ -213,7 +337,67 @@ function buildIssueNote(issue, pages, stats) {
   return lines.join('\n');
 }
 
-function buildGenerationNote(issue, page, generation) {
+function buildAuthorNote(authorName, slug, issues, yearByIssue) {
+  const displayName = authorName || 'Unknown Author';
+  const lines = [`# ${displayName}`, '', '## Issues'];
+  const sorted = [...issues].sort((a, b) => String(a.title).localeCompare(String(b.title)));
+  for (const issue of sorted) {
+    const issueSlug = slugify(issue.title || issue.id);
+    const year = yearByIssue.get(issue.id) || 'unknown';
+    const yearLabel = year === 'unknown' ? 'Unknown Year' : year;
+    lines.push(`- [[Issues/${issueSlug}|${issue.title || issue.id}]] (${yearLabel})`);
+  }
+
+  const yearSet = new Set();
+  for (const issue of issues) {
+    const year = yearByIssue.get(issue.id) || 'unknown';
+    yearSet.add(year);
+  }
+  const years = [...yearSet].sort((a, b) => String(a).localeCompare(String(b)));
+  lines.push('', '## Years');
+  if (years.length === 0) {
+    lines.push('- None');
+  } else {
+    for (const year of years) {
+      const yearLabel = year === 'unknown' ? 'Unknown Year' : year;
+      lines.push(`- [[Years/${year}|${yearLabel}]]`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function buildTagNote(tagName, slug, issues, yearByIssue) {
+  const displayName = tagName || 'Unknown Tag';
+  const lines = [`# ${displayName}`, '', '## Issues'];
+  const sorted = [...issues].sort((a, b) => String(a.title).localeCompare(String(b.title)));
+  for (const issue of sorted) {
+    const issueSlug = slugify(issue.title || issue.id);
+    const year = yearByIssue.get(issue.id) || 'unknown';
+    const yearLabel = year === 'unknown' ? 'Unknown Year' : year;
+    lines.push(`- [[Issues/${issueSlug}|${issue.title || issue.id}]] (${yearLabel})`);
+  }
+
+  const yearSet = new Set();
+  for (const issue of issues) {
+    const year = yearByIssue.get(issue.id) || 'unknown';
+    yearSet.add(year);
+  }
+  const years = [...yearSet].sort((a, b) => String(a).localeCompare(String(b)));
+  lines.push('', '## Years');
+  if (years.length === 0) {
+    lines.push('- None');
+  } else {
+    for (const year of years) {
+      const yearLabel = year === 'unknown' ? 'Unknown Year' : year;
+      lines.push(`- [[Years/${year}|${yearLabel}]]`);
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function buildGenerationNote(issue, page, generation, year) {
   const lines = [
     `# ${issue.title || issue.id} Page ${String(page.page_number || 0).padStart(3, '0')} OCR`,
     '',
@@ -234,6 +418,12 @@ function buildGenerationNote(issue, page, generation) {
   } else {
     lines.push('', '## Output', '', '_No output stored._');
   }
+
+  const issueSlug = slugify(issue.title || issue.id);
+  const yearLabel = year === 'unknown' ? 'Unknown Year' : year;
+  lines.push('', '## Backlinks');
+  lines.push(`- [[Issues/${issueSlug}|${issue.title || issue.id}]]`);
+  lines.push(`- [[Years/${year}|${yearLabel}]]`);
 
   return lines.join('\n');
 }
@@ -337,20 +527,55 @@ async function main() {
   }
 
   const years = {};
+  const yearByIssue = new Map();
   for (const issue of issues) {
     const year = inferYear(issue);
     if (!years[year]) years[year] = [];
     years[year].push(issue);
+    yearByIssue.set(issue.id, year);
+  }
+
+  const issueAuthors = new Map();
+  const issueTags = new Map();
+  const authorsIndex = new Map();
+  const tagsIndex = new Map();
+
+  for (const issue of issues) {
+    const authors = deriveAuthors(issue);
+    const tags = deriveTags(issue);
+    const year = yearByIssue.get(issue.id) || 'unknown';
+    issueAuthors.set(issue.id, authors);
+    issueTags.set(issue.id, tags);
+
+    for (const author of authors) {
+      const existing = authorsIndex.get(author.slug) || { name: author.name, issues: [], years: new Set() };
+      existing.name = existing.name || author.name;
+      existing.issues.push(issue);
+      existing.years.add(year);
+      authorsIndex.set(author.slug, existing);
+    }
+
+    for (const tag of tags) {
+      const existing = tagsIndex.get(tag.slug) || { name: tag.name, issues: [], years: new Set() };
+      existing.name = existing.name || tag.name;
+      existing.issues.push(issue);
+      existing.years.add(year);
+      tagsIndex.set(tag.slug, existing);
+    }
   }
 
   const yearsDir = join(outDir, 'Years');
   const issuesDir = join(outDir, 'Issues');
   const generationsDir = join(outDir, 'Generations');
+  const authorsDir = join(outDir, 'Authors');
+  const tagsDir = join(outDir, 'Tags');
   const logsDir = join(outDir, 'Logs');
   const logPath = join(logsDir, 'Export Log.md');
   await mkdir(yearsDir, { recursive: true });
   await mkdir(issuesDir, { recursive: true });
   await mkdir(generationsDir, { recursive: true });
+  await mkdir(authorsDir, { recursive: true });
+  await mkdir(tagsDir, { recursive: true });
   await mkdir(logsDir, { recursive: true });
 
   const overviewPath = join(outDir, 'Overview.md');
@@ -360,8 +585,13 @@ async function main() {
   let totalNewGenerations = 0;
   let totalUpdatedIssues = 0;
   let totalUpdatedYears = 0;
+  let totalUpdatedAuthors = 0;
+  let totalUpdatedTags = 0;
   let lastGenerationFile = '';
   let lastGenerationId = '';
+
+  const impactedAuthors = new Set(!incremental ? [...authorsIndex.keys()] : []);
+  const impactedTags = new Set(!incremental ? [...tagsIndex.keys()] : []);
 
   const sortedYears = Object.entries(years).sort(([a], [b]) => a.localeCompare(b));
   for (const [year, issueList] of sortedYears) {
@@ -376,6 +606,7 @@ async function main() {
       const issueSlug = slugify(issue.title || issue.id);
       const issuePath = join(issuesDir, `${issueSlug}.md`);
       const issueExists = existsSync(issuePath);
+      const issueYear = yearByIssue.get(issue.id) || year;
       const issuePages = pagesByIssue.get(issue.id) || [];
       totalPagesForYear += issuePages.length;
       for (const page of issuePages) {
@@ -392,7 +623,7 @@ async function main() {
           if (incremental && existsSync(generationPath)) {
             continue;
           }
-          const generationContent = buildGenerationNote(issue, page, generation);
+          const generationContent = buildGenerationNote(issue, page, generation, issueYear);
           await writeFile(generationPath, generationContent, 'utf8');
           hasNewGenerations = true;
           newGenerationsForYear += 1;
@@ -413,18 +644,31 @@ async function main() {
         pagesWithGenerations: issuePages.filter((page) => (ocrByPage.get(page.id) || []).length > 0).length,
       };
       if (shouldWriteIssue) {
-        const issueContent = buildIssueNote(issue, issuePages, stats);
+        const issueContent = buildIssueNote(issue, issuePages, stats, {
+          authors: issueAuthors.get(issue.id) || [],
+          tags: issueTags.get(issue.id) || [],
+          year: issueYear,
+        });
         await writeFile(issuePath, issueContent, 'utf8');
         totalUpdatedIssues += 1;
+        for (const author of issueAuthors.get(issue.id) || []) {
+          impactedAuthors.add(author.slug);
+        }
+        for (const tag of issueTags.get(issue.id) || []) {
+          impactedTags.add(tag.slug);
+        }
       }
       if (!issueExists && shouldWriteIssue) {
         yearNeedsUpdate = true;
         overviewNeedsUpdate = true;
       }
+      if (shouldWriteIssue) {
+        yearNeedsUpdate = true;
+      }
     }
 
     if (yearNeedsUpdate) {
-      const yearContent = buildYearNote(year, issueList);
+      const yearContent = buildYearNote(year, issueList, issueAuthors, issueTags);
       await writeFile(yearPath, yearContent, 'utf8');
       totalUpdatedYears += 1;
     }
@@ -432,6 +676,24 @@ async function main() {
     console.log(
       `Finished year ${year}: ${issueList.length} issues, ${totalPagesForYear} pages, ${newGenerationsForYear} new generations.`
     );
+  }
+
+  for (const slug of impactedAuthors) {
+    const author = authorsIndex.get(slug);
+    if (!author) continue;
+    const authorContent = buildAuthorNote(author.name, slug, author.issues, yearByIssue);
+    const authorPath = join(authorsDir, `${slug}.md`);
+    await writeFile(authorPath, authorContent, 'utf8');
+    totalUpdatedAuthors += 1;
+  }
+
+  for (const slug of impactedTags) {
+    const tag = tagsIndex.get(slug);
+    if (!tag) continue;
+    const tagContent = buildTagNote(tag.name, slug, tag.issues, yearByIssue);
+    const tagPath = join(tagsDir, `${slug}.md`);
+    await writeFile(tagPath, tagContent, 'utf8');
+    totalUpdatedTags += 1;
   }
 
   if (overviewNeedsUpdate) {
@@ -445,6 +707,8 @@ async function main() {
     `- imported: ${totalNewGenerations} new generations`,
     `- updated issues: ${totalUpdatedIssues}`,
     `- updated years: ${totalUpdatedYears}`,
+    `- updated authors: ${totalUpdatedAuthors}`,
+    `- updated tags: ${totalUpdatedTags}`,
     `- last file: ${lastGenerationFile || 'none'}`,
   ];
   await appendLogEntry(logPath, logLines);
