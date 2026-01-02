@@ -30,19 +30,30 @@ Where:
 
 ## Note Contents
 `Overview.md`
+- YAML frontmatter with `type: dashboard`, `id`, `slug`, `authors`, `tags`,
+  `created_at`, `updated_at`
 - Links to each year and issue.
 
 `Years/<year>.md`
+- YAML frontmatter with `type: year`, `id`, `slug`, `year`, `authors`, `tags`,
+  `created_at`, `updated_at`, `issue_count`
 - Links to all issues in that year.
 
 `Issues/<issue-slug>.md`
-- Metadata: id, volume, publication_date, created_at, updated_at
+- YAML frontmatter with `type: issue`, `id`, `slug`, `title`, `volume`,
+  `publication_date`, `year`, `authors` (list), `tags` (list), `created_at`,
+  `updated_at`
 - Stats: total pages, pages with OCR text, pages with OCR generations
 - One line per page with an online image link and OCR generation links
 
 `Generations/<issue-slug>-page-###-gen-<id>.md`
-- Metadata: generation id, page id, issue id, created_at, model, image_path
+- YAML frontmatter with `type: generation`, `id`, `slug`, `issue_id`, `page_id`,
+  `issue_title`, `page_number`, `year`, `authors` (list), `tags` (list),
+  `created_at`, `updated_at`, `model`, `status`, `image_path`
 - OCR prompt/output from `ocr_generations`
+
+Array-valued fields such as `authors` and `tags` are emitted as YAML lists to
+keep Dataview queries consistent across note types.
 
 ## Environment Variables
 Required:
