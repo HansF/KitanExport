@@ -22,6 +22,9 @@ The export creates (or updates) these files under the target folder:
 - `Years/<year>.md`
 - `Issues/<issue-slug>.md`
 - `Generations/<issue-slug>-page-###-gen-<id>.md`
+- `Dashboards/Authors.md`
+- `Dashboards/Tags.md`
+- `Dashboards/Recent Issues.md`
 
 Where:
 - `<year>` is a 4-digit year or `unknown`
@@ -43,6 +46,18 @@ Where:
 `Generations/<issue-slug>-page-###-gen-<id>.md`
 - Metadata: generation id, page id, issue id, created_at, model, image_path
 - OCR prompt/output from `ocr_generations`
+
+`Dashboards/Authors.md`
+- Groups issues by author, listing each author, the number of issues they appear on, and links to the related issue notes.
+- Uses the `authors` field already fetched from issues (no extra API calls or dependencies).
+
+`Dashboards/Tags.md`
+- Groups issues by tag, showing each tag, how many issues use it, and links to those issue notes.
+- Uses the `tags` field already fetched from issues (no extra API calls or dependencies).
+
+`Dashboards/Recent Issues.md`
+- Lists the most recently created issues (sorted by `created_at`) with links to their notes and any available `authors` and `tags` metadata inline.
+- Uses existing issue metadata only; no new dependencies are required.
 
 ## Environment Variables
 Required:
@@ -74,7 +89,8 @@ Other CLI options:
 Tables and columns used:
 
 `public.issues`
-- `id`, `title`, `volume`, `publication_date`, `created_at`, `updated_at`
+- `id`, `title`, `volume`, `publication_date`, `authors`, `tags`, `created_at`, `updated_at`
+- Dashboards assume `authors` and `tags` are available (arrays or delimited strings) so they can group and label issues without extra queries.
 
 `public.pages`
 - `id`, `issue_id`, `page_number`, `image_path`, `status`, `ocr_text`,
