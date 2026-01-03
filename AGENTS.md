@@ -21,6 +21,7 @@ No build step is required. There are no automated tests in this repository.
 - Prefer clear function names that describe behavior (`inferYear`, `buildIssueNote`).
 - Keep helper utilities (formatting, slugging, data fetchers) as small, pure functions when possible.
 - Avoid introducing new dependencies unless required for core functionality.
+- When you add cross-linking (e.g., authors/tags dashboards), keep link labels and section headings in sync so Obsidian section links remain stable.
 
 ## Testing Guidelines
 - No test framework is configured.
@@ -31,6 +32,7 @@ No build step is required. There are no automated tests in this repository.
 - No Git history is available to infer conventions. Use concise, imperative commit messages (e.g., "Add year inference fallback").
 - PRs should include a brief description of changes, expected output differences, and any new environment requirements.
 - If output structure changes, update `export-obsidian.md` and include a small example in the PR description.
+- After committing, generate a PR message with the `make_pr` tool that summarizes the change and testing status.
 
 ## Configuration Notes
 - Required env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
