@@ -143,6 +143,19 @@ function formatDate(value) {
   return parsed.toISOString();
 }
 
+function normalizeListField(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(/[;,\n]+/g)
+      .map((part) => part.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
 function buildOverview({ years, issues }) {
   const lines = ['# Kitan OCR Export', '', '## Logs', '- [[Logs/Export Log|Export Log]]', '', '## Years'];
   const yearEntries = Object.entries(years).sort(([a], [b]) => a.localeCompare(b));
@@ -157,6 +170,11 @@ function buildOverview({ years, issues }) {
     const issueSlug = slugify(issue.title || issue.id);
     lines.push(`- [[Issues/${issueSlug}|${issue.title || issue.id}]]`);
   }
+
+  lines.push('', '## Dashboards');
+  lines.push('- [[Dashboards/Authors|Authors]]');
+  lines.push('- [[Dashboards/Tags|Tags]]');
+  lines.push('- [[Dashboards/Recent Issues|Recent Issues]]');
 
   return lines.join('\n');
 }
@@ -186,6 +204,8 @@ function buildIssueNote(issue, pages, stats) {
     `- id: ${issue.id}`,
     `- volume: ${issue.volume || 'unknown'}`,
     `- publication_date: ${issue.publication_date || 'unknown'}`,
+    `- authors: ${normalizeListField(issue.authors).join(', ') || 'unknown'}`,
+    `- tags: ${normalizeListField(issue.tags).join(', ') || 'unknown'}`,
     `- created_at: ${formatDate(issue.created_at)}`,
     `- updated_at: ${formatDate(issue.updated_at)}`,
     '',
@@ -233,6 +253,91 @@ function buildGenerationNote(issue, page, generation) {
     lines.push('', '## Output', '', '```', String(generation.output), '```');
   } else {
     lines.push('', '## Output', '', '_No output stored._');
+  }
+
+  return lines.join('\n');
+}
+
+function addIssueToGroup(map, key, issue) {
+  if (!map.has(key)) map.set(key, []);
+  map.get(key).push(issue);
+}
+
+function buildAuthorsDashboard(issues) {
+  const grouped = new Map();
+  for (const issue of issues) {
+    const authors = normalizeListField(issue.authors);
+    if (!authors.length) {
+      addIssueToGroup(grouped, 'Unknown', issue);
+      continue;
+    }
+    for (const author of authors) {
+      addIssueToGroup(grouped, author || 'Unknown', issue);
+    }
+  }
+
+  const lines = ['# Authors', '', 'Issues grouped by author.', ''];
+  const entries = [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b));
+  for (const [author, authorIssues] of entries) {
+    lines.push(`## ${author}`);
+    lines.push(`- total issues: ${authorIssues.length}`);
+    const sortedIssues = [...authorIssues].sort((a, b) => String(a.title).localeCompare(String(b.title)));
+    for (const issue of sortedIssues) {
+      const issueSlug = slugify(issue.title || issue.id);
+      lines.push(`- [[Issues/${issueSlug}|${issue.title || issue.id}]]`);
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+function buildTagsDashboard(issues) {
+  const grouped = new Map();
+  for (const issue of issues) {
+    const tags = normalizeListField(issue.tags);
+    if (!tags.length) {
+      addIssueToGroup(grouped, 'Untagged', issue);
+      continue;
+    }
+    for (const tag of tags) {
+      addIssueToGroup(grouped, tag || 'Untagged', issue);
+    }
+  }
+
+  const lines = ['# Tags', '', 'Issues grouped by tag.', ''];
+  const entries = [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b));
+  for (const [tag, taggedIssues] of entries) {
+    lines.push(`## ${tag}`);
+    lines.push(`- total issues: ${taggedIssues.length}`);
+    const sortedIssues = [...taggedIssues].sort((a, b) => String(a.title).localeCompare(String(b.title)));
+    for (const issue of sortedIssues) {
+      const issueSlug = slugify(issue.title || issue.id);
+      lines.push(`- [[Issues/${issueSlug}|${issue.title || issue.id}]]`);
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+function buildRecentIssuesDashboard(issues, limit = 50) {
+  const toTimestamp = (value) => {
+    const parsed = new Date(value);
+    const time = parsed.valueOf();
+    return Number.isNaN(time) ? 0 : time;
+  };
+
+  const sorted = [...issues].sort((a, b) => toTimestamp(b.created_at) - toTimestamp(a.created_at));
+  const lines = ['# Recent Issues', '', 'Most recently created issues.', ''];
+
+  for (const issue of sorted.slice(0, limit)) {
+    const issueSlug = slugify(issue.title || issue.id);
+    const authors = normalizeListField(issue.authors).join(', ') || 'unknown';
+    const tags = normalizeListField(issue.tags).join(', ') || 'unknown';
+    lines.push(
+      `- [[Issues/${issueSlug}|${issue.title || issue.id}]] — created_at: ${formatDate(issue.created_at)} — authors: ${authors} — tags: ${tags}`
+    );
   }
 
   return lines.join('\n');
@@ -346,11 +451,13 @@ async function main() {
   const yearsDir = join(outDir, 'Years');
   const issuesDir = join(outDir, 'Issues');
   const generationsDir = join(outDir, 'Generations');
+  const dashboardsDir = join(outDir, 'Dashboards');
   const logsDir = join(outDir, 'Logs');
   const logPath = join(logsDir, 'Export Log.md');
   await mkdir(yearsDir, { recursive: true });
   await mkdir(issuesDir, { recursive: true });
   await mkdir(generationsDir, { recursive: true });
+  await mkdir(dashboardsDir, { recursive: true });
   await mkdir(logsDir, { recursive: true });
 
   const overviewPath = join(outDir, 'Overview.md');
@@ -456,6 +563,13 @@ async function main() {
     totalNewGenerations,
   };
   await saveState(statePath, nextState);
+
+  const authorsDashboard = buildAuthorsDashboard(issues);
+  const tagsDashboard = buildTagsDashboard(issues);
+  const recentDashboard = buildRecentIssuesDashboard(issues);
+  await writeFile(join(dashboardsDir, 'Authors.md'), authorsDashboard, 'utf8');
+  await writeFile(join(dashboardsDir, 'Tags.md'), tagsDashboard, 'utf8');
+  await writeFile(join(dashboardsDir, 'Recent Issues.md'), recentDashboard, 'utf8');
 
   console.log(`Export complete. Wrote notes to ${outDir}`);
 }
