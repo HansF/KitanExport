@@ -39,7 +39,7 @@ Where:
 - Links to all issues in that year.
 
 `Issues/<issue-slug>.md`
-- Metadata: id, volume, publication_date, created_at, updated_at
+- Metadata: id, volume, publication_date, authors, tags, created_at, updated_at
 - Stats: total pages, pages with OCR text, pages with OCR generations
 - One line per page with an online image link and OCR generation links
 
@@ -58,6 +58,8 @@ Where:
 `Dashboards/Recent Issues.md`
 - Lists the most recently created issues (sorted by `created_at`) with links to their notes and any available `authors` and `tags` metadata inline.
 - Uses existing issue metadata only; no new dependencies are required.
+
+Authors and tags are read directly from the `issues` rows. Arrays are used as-is; comma, semicolon, or newline-delimited strings are split into individual entries before grouping and linking.
 
 ## Environment Variables
 Required:
