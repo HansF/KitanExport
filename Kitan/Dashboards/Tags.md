@@ -1,39 +1,9 @@
-# Kitan OCR Export
+# Tags
 
-## Logs
-- [[Logs/Export Log|Export Log]]
+Issues grouped by tag.
 
-## Years
-- [[Years/1947|1947]] (2 issues)
-- [[Years/1948|1948]] (3 issues)
-- [[Years/1950|1950]] (3 issues)
-- [[Years/1951|1951]] (5 issues)
-- [[Years/1952|1952]] (6 issues)
-- [[Years/1953|1953]] (1 issues)
-- [[Years/1954|1954]] (7 issues)
-- [[Years/1955|1955]] (5 issues)
-- [[Years/1956|1956]] (4 issues)
-- [[Years/1957|1957]] (7 issues)
-- [[Years/1958|1958]] (3 issues)
-- [[Years/1959|1959]] (9 issues)
-- [[Years/1960|1960]] (3 issues)
-- [[Years/1962|1962]] (5 issues)
-- [[Years/1963|1963]] (12 issues)
-- [[Years/1964|1964]] (11 issues)
-- [[Years/1965|1965]] (10 issues)
-- [[Years/1966|1966]] (3 issues)
-- [[Years/1967|1967]] (12 issues)
-- [[Years/1968|1968]] (10 issues)
-- [[Years/1969|1969]] (11 issues)
-- [[Years/1970|1970]] (12 issues)
-- [[Years/1971|1971]] (5 issues)
-- [[Years/1972|1972]] (9 issues)
-- [[Years/1973|1973]] (10 issues)
-- [[Years/1974|1974]] (1 issues)
-- [[Years/1982|1982]] (8 issues)
-- [[Years/1983|1983]] (1 issues)
-
-## Issues
+## Untagged
+- total issues: 178
 - [[Issues/194711|194711]]
 - [[Issues/194712|194712]]
 - [[Issues/194803|194803]]
@@ -212,8 +182,3 @@
 - [[Issues/198211|198211]]
 - [[Issues/198212|198212]]
 - [[Issues/198301|198301]]
-
-## Dashboards
-- [[Dashboards/Authors|Authors]]
-- [[Dashboards/Tags|Tags]]
-- [[Dashboards/Recent Issues|Recent Issues]]
